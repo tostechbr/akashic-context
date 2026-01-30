@@ -4,12 +4,18 @@
  */
 
 // Types
-export * from "./types";
+export * from "./types.js";
 
 // Memory System
-export * from "./memory/hybrid";
+export * from "./memory/hybrid.js";
+export * from "./memory/chunking.js";
+
+// Utils
+export * from "./utils/hash.js";
+export * from "./utils/tokens.js";
+export * from "./utils/files.js";
 
 // TODO: Export other modules as they are implemented
-// export * from "./memory/manager";
-// export * from "./context/manager";
-// export * from "./engine";
+// export * from "./memory/manager.js";
+// export * from "./context/manager.js";
+// export * from "./engine.js";
