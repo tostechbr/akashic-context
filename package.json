@@ -9,6 +9,7 @@
   },
   "author": "Tiago Santos",
   "license": "MIT",
+  "packageManager": "pnpm@10.22.0",
   "workspaces": [
     "packages/*"
   ],

@@ -9,6 +9,9 @@ export * from "./types.js";
 // Memory System
 export * from "./memory/hybrid.js";
 export * from "./memory/chunking.js";
+export * from "./memory/storage.js";
+export * from "./memory/manager.js";
+export * from "./memory/providers/index.js";
 
 // Utils
 export * from "./utils/hash.js";

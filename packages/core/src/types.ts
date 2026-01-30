@@ -42,7 +42,7 @@ export interface MemorySearchResult {
   startLine: number;
   endLine: number;
   score: number;
-  content: string;
+  snippet: string;
   source: "memory" | "sessions";
 }
 
