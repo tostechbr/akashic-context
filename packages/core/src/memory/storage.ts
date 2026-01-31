@@ -280,10 +280,8 @@ export class MemoryStorage {
    */
   private syncChunkToFts(chunk: StoredChunk): void {
     const stmt = this.db.prepare(`
-      INSERT INTO chunks_fts (id, path, source, model, start_line, end_line, text)
+      INSERT OR REPLACE INTO chunks_fts (id, path, source, model, start_line, end_line, text)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(rowid) DO UPDATE SET
-        text = excluded.text
     `);
     stmt.run(
       chunk.id,

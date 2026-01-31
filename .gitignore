@@ -50,7 +50,7 @@ test-data/
 
 # Claude Code (não subir!)
 .claude/
-CLAUDE.md
+# CLAUDE.md
 .clawdrc.json
 .agent/
 *.claude-context
