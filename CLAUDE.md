@@ -1,27 +1,19 @@
-# Memory Context Engine
+# Akashic Context
 
-Biblioteca standalone para **Memory** (long-term) + **Context** (short-term) management para LLMs.
-Baseada nos padrões battle-tested do Moltbot.
-
-## Objetivo
-
-Criar uma biblioteca universal e opensource que qualquer projeto possa usar para:
-- **Memory System**: Armazenamento e busca de memórias de longo prazo (hybrid search: vector + keyword)
-- **Context Management**: Gerenciamento de contexto de curto prazo (session, compaction, pruning)
+Biblioteca open-source para adicionar memória persistente a agentes de IA.
 
 ## Estrutura do Projeto
 
 ```
 packages/
-├── core/                    # Biblioteca principal (Core)
+├── core/                    # Biblioteca principal
 │   └── src/
 │       ├── memory/          # Memory system
 │       │   ├── chunking.ts  # Markdown chunking com overlap
-│       │   ├── hybrid.ts    # Hybrid search (vector + BM25)
+│       │   ├── hybrid.ts    # Hybrid search (BM25)
 │       │   ├── storage.ts   # SQLite storage layer
 │       │   ├── manager.ts   # Memory Manager
-│       │   └── providers/   # Embedding providers (OpenAI, etc.)
-│       ├── context/         # Context management (TODO)
+│       │   └── providers/   # Embedding providers
 │       ├── utils/           # Utilities (hash, tokens, files)
 │       ├── types.ts         # Core type definitions
 │       └── index.ts         # Main exports
@@ -32,52 +24,13 @@ packages/
         └── cli.ts           # CLI entry point
 ```
 
-## Setup Inicial
-
-### 1. Instalar Dependências
-
-```bash
-pnpm install
-```
-
-### 2. Compilar Native Modules (better-sqlite3)
-
-**Problema conhecido**: O `better-sqlite3` precisa de native bindings compilados para M1/M2 Macs.
-
-**Solução**:
-
-```bash
-# Método 1: Rebuild direto no módulo instalado
-cd node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3
-npm run build-release
-cd ../../../../../..
-
-# Método 2: Usar prebuilt binaries (alternativa)
-# Editar package.json e substituir:
-# "better-sqlite3": "npm:@mapbox/better-sqlite3-prebuilt@^11.0.0"
-```
-
-**Verificar se funcionou**:
-
-```bash
-pnpm test -- --run
-# Deve mostrar: 86/88 testes passando (97.7%)
-```
-
-### 3. Build do Projeto
-
-```bash
-pnpm build            # Compilar TypeScript (ESM + CJS + DTS)
-```
-
 ## Comandos
 
 ```bash
 pnpm install          # Instalar dependências
 pnpm build            # Compilar todos os packages
-pnpm test             # Rodar testes (Vitest watch mode)
+pnpm test             # Rodar testes (Vitest)
 pnpm test -- --run    # Rodar testes sem watch mode
-pnpm dev              # Dev mode (turbo watch)
 ```
 
 ### MCP Server
@@ -85,36 +38,32 @@ pnpm dev              # Dev mode (turbo watch)
 ```bash
 cd packages/mcp-server
 pnpm build            # Compilar MCP Server
-pnpm dev              # Rodar em dev mode
+node test-simple.js   # Testar localmente
 ```
 
-## Uso Rápido
+## Uso
 
-### Como Biblioteca (Uso Direto)
+### Como Biblioteca
 
 ```typescript
-import { MemoryManager } from "memory-context-engine";
+import { MemoryManager } from "akashic-context";
 
 const manager = new MemoryManager({
   workspaceDir: "./workspace",
   dbPath: "./memory.db"
 });
 
-// Indexar arquivos
 await manager.sync();
 
-// Buscar
 const results = await manager.search("projeto X", {
   maxResults: 5,
-  minScore: 0.4
+  minScore: 0
 });
-
-console.log(results);
 ```
 
-### Como MCP Server (Para Agentes)
+### Como MCP Server
 
-#### 1. Com Claude Desktop
+#### Claude Desktop
 
 Adicionar em `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
@@ -123,183 +72,114 @@ Adicionar em `~/Library/Application Support/Claude/claude_desktop_config.json`:
   "mcpServers": {
     "memory": {
       "command": "node",
-      "args": ["/path/to/memory-context-engine/packages/mcp-server/dist/cli.js"],
+      "args": ["/path/to/akashic-context/packages/mcp-server/dist/cli.js"],
       "env": {
-        "MEMORY_WORKSPACE_DIR": "/path/to/workspace",
-        "OPENAI_API_KEY": "sk-..."
+        "MEMORY_WORKSPACE_DIR": "/path/to/workspace"
       }
     }
   }
 }
 ```
 
-#### 2. Com n8n (Local)
+#### n8n
 
-```javascript
-// n8n Code node
-const results = $mcp.callTool('memory', 'memory_search', {
-  query: 'database architecture',
-  maxResults: 5
-});
+Usar o wrapper script:
+
+```
+Command: bash
+Arguments: /path/to/akashic-context/packages/mcp-server/run-server.sh
 ```
 
-#### 3. Com Cursor
-
-Adicionar em settings.json:
-
-```json
-{
-  "mcp.servers": {
-    "memory": {
-      "command": "node",
-      "args": ["packages/mcp-server/dist/cli.js"],
-      "env": {
-        "MEMORY_WORKSPACE_DIR": "${workspaceFolder}"
-      }
-    }
-  }
-}
-```
+Editar `run-server.sh` para apontar para seu workspace.
 
 ## Convenções de Código
 
 - **Linguagem**: TypeScript ESM, strict mode
-- **Runtime**: Node 22+
+- **Runtime**: Node 18+
 - **Arquivos**: Manter < 500 LOC quando possível
 - **Testes**: Colocados como `*.test.ts` junto ao código
 - **Imports**: Usar extensão `.js` nos imports (ESM)
-- **Comentários**: Breves, apenas para lógica não-óbvia
 - **Types**: Evitar `any`, preferir tipos explícitos
 
 ## Arquitetura
 
-### Core + Adapters Pattern
-
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Core Library                          │
-│  (packages/core)                                        │
-│                                                         │
-│  • MemoryManager - Orchestration                       │
-│  • HybridSearch - Vector + Keyword                     │
-│  • MemoryStorage - SQLite persistence                  │
-│  • EmbeddingProviders - OpenAI, Gemini, Local          │
-│  • Zero framework dependencies                         │
-└─────────────────────────────────────────────────────────┘
-            ↑                           ↑
-            │                           │
-    ┌───────┴───────┐           ┌───────┴───────┐
-    │  MCP Server   │           │  HTTP API     │
-    │  (stdio/HTTP) │           │  (Express)    │
-    │  packages/    │           │  (future)     │
-    │  mcp-server   │           │               │
-    └───────────────┘           └───────────────┘
-            ↑                           ↑
-            │                           │
-    ┌───────┴───────┐           ┌───────┴───────┐
-    │  Claude       │           │  n8n Cloud    │
-    │  Cursor       │           │  Webhooks     │
-    │  n8n (local)  │           │  Custom Apps  │
-    └───────────────┘           └───────────────┘
+┌─────────────────────────────────────────────┐
+│              Core Library                    │
+│  (packages/core)                            │
+│                                             │
+│  • MemoryManager - Orchestration            │
+│  • HybridSearch - Keyword (BM25)            │
+│  • MemoryStorage - SQLite + FTS5            │
+│  • Zero framework dependencies              │
+└─────────────────────────────────────────────┘
+                    ↑
+                    │
+            ┌───────┴───────┐
+            │  MCP Server   │
+            │  (stdio)      │
+            └───────────────┘
+                    ↑
+                    │
+            ┌───────┴───────┐
+            │  Claude       │
+            │  Cursor       │
+            │  n8n (local)  │
+            └───────────────┘
 ```
 
-### Memory System (Core)
+### Memory System
 - **Chunking**: Divide markdown em chunks (~400 tokens, 80 overlap)
-- **Storage**: SQLite com FTS5 (keyword) + sqlite-vec (vector)
-- **Hybrid Search**: 70% vector + 30% keyword scoring
+- **Storage**: SQLite com FTS5 (keyword search)
+- **Hybrid Search**: BM25 keyword scoring
 - **Embedding Cache**: Deduplicação por hash
 
-### MCP Server (Adapter)
+### MCP Server
 - **Tools**: `memory_search`, `memory_get`
-- **Transport**: stdio (para Claude, Cursor, n8n local)
-- **Configuration**: Environment variables
-- **Hot-reload**: File watching automático
-
-### Context Management (TODO - Future)
-- Session compaction
-- Token counting
-- Pruning strategies
-
-## Padrões Extraídos do Moltbot
-
-Este projeto extrai e adapta código battle-tested do Moltbot:
-- `chunkMarkdown()` - Chunking com overlap
-- `mergeHybridResults()` - Merge de resultados híbridos
-- `bm25RankToScore()` - Conversão de rank BM25
-- Schema SQLite (files, chunks, embedding_cache, FTS5)
+- **Transport**: stdio
+- **Configuration**: Environment variables ou CLI flags
 
 ## Status
 
-### Phase 1: Memory System ✅ (97.7% completo)
+### Implementado
+- [x] Core memory system
+- [x] Chunking algorithm
+- [x] SQLite storage com FTS5
+- [x] BM25 keyword search
+- [x] MCP Server
+- [x] Integração com n8n, Claude Desktop, Cursor
 
-**Core Library** (packages/core):
-- [x] Project setup
-- [x] Core types (100% - 129 LOC)
-- [x] Chunking algorithm (100% - 21/21 tests ✅)
-- [x] Hybrid search (100% - 25/25 tests ✅)
-- [x] SQLite storage (100% - 20/20 tests ✅)
-- [x] Memory Manager (90% - 18/20 tests ✅)
-- [x] OpenAI embedding provider (100%)
-- [x] Utilities (hash, tokens, files - 100%)
-- [x] **Total: 86/88 testes passando** 🎉
-
-**MCP Server Adapter** (packages/mcp-server):
-- [x] MCP Server implementation
-- [x] Tools: memory_search, memory_get
-- [x] CLI entry point
-- [x] Documentation & examples
-- [x] Support for Claude Desktop, Cursor, n8n
-
-**Known Issues**:
-- 🟡 2 manager tests failing (edge cases, não bloqueia uso)
-- 🟡 better-sqlite3 precisa compilação manual (documentado acima)
-
-### Phase 2: Context Manager (TODO)
-- [ ] Session management
-- [ ] Token counting
-- [ ] Message compaction
-- [ ] Context pruning
-
-### Phase 3: Additional Adapters (Future)
-- [ ] HTTP API adapter (Express/Fastify)
-- [ ] LangChain Python tool
-- [ ] LangChain.js integration
+### Roadmap
+- [ ] Vector search (sqlite-vec)
+- [ ] HTTP API adapter
+- [ ] Mais embedding providers
 
 ## Troubleshooting
 
 ### "Could not locate the bindings file" (better-sqlite3)
 
-**Causa**: Native module não compilado.
+Native module não compilado:
 
-**Solução**:
 ```bash
 cd node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3
 npm run build-release
 ```
 
-### Tests failing (Storage/Manager)
-
-**Verificar**:
-1. better-sqlite3 está compilado? (ver acima)
-2. Rodar `pnpm test -- --run` para ver output completo
-3. Verificar permissões de escrita no diretório
-
 ### MCP Server não inicia
 
-**Verificar**:
-1. Workspace directory existe?
-2. OPENAI_API_KEY está configurada? (se usando OpenAI)
-3. Verificar stderr para erros
+1. Verificar se workspace directory existe
+2. Verificar stderr para erros
+3. Testar com `node packages/mcp-server/dist/cli.js --workspace=/path`
 
 ### Busca retorna 0 resultados
 
-**Verificar**:
-1. Arquivos MEMORY.md ou memory/*.md existem?
-2. `await manager.sync()` foi chamado?
-3. Reduzir `minScore` (tentar 0.2)
+1. Verificar se arquivos MEMORY.md ou memory/*.md existem
+2. Verificar se `minScore` não está muito alto (usar 0 para ver todos)
+3. Deletar database para forçar reindex: `rm -f memory.db`
 
 ## Links
 
-- **Repo**: https://github.com/tostechbr/memory-context-engine
-- **Baseado em**: [Moltbot](https://github.com/moltbot/moltbot)
+- **Repo**: https://github.com/tostechbr/akashic-context
+- **Docs**: [README.md](./README.md)
+- **Testing**: [docs/TESTING.md](./docs/TESTING.md)
 - **MCP Protocol**: https://modelcontextprotocol.io

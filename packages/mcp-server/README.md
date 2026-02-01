@@ -1,6 +1,6 @@
-# Memory Context Engine - MCP Server
+# Akashic Context - MCP Server
 
-MCP (Model Context Protocol) Server adapter for the Memory Context Engine. Exposes memory search and retrieval capabilities to AI agents via the standardized MCP protocol.
+MCP (Model Context Protocol) Server adapter for Akashic Context. Exposes memory search and retrieval capabilities to AI agents via the standardized MCP protocol.
 
 ## Features
 
@@ -13,7 +13,7 @@ MCP (Model Context Protocol) Server adapter for the Memory Context Engine. Expos
 ## Installation
 
 ```bash
-pnpm install @memory-context-engine/mcp-server
+pnpm install @akashic-context/mcp-server
 ```
 
 Or build from source:
@@ -47,7 +47,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
     "memory": {
       "command": "npx",
       "args": [
-        "@memory-context-engine/mcp-server"
+        "@akashic-context/mcp-server"
       ],
       "env": {
         "MEMORY_WORKSPACE_DIR": "/path/to/your/workspace",
@@ -63,7 +63,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 1. **Install n8n MCP node** (if available)
 2. **Configure MCP Server connection**:
    - Protocol: stdio
-   - Command: `npx @memory-context-engine/mcp-server`
+   - Command: `npx @akashic-context/mcp-server`
    - Working directory: Your workspace path
 
 3. **Use in workflow**:
@@ -87,7 +87,7 @@ Add to Cursor settings:
   "mcp.servers": {
     "memory": {
       "command": "npx",
-      "args": ["@memory-context-engine/mcp-server"],
+      "args": ["@akashic-context/mcp-server"],
       "env": {
         "MEMORY_WORKSPACE_DIR": "${workspaceFolder}",
         "OPENAI_API_KEY": "sk-..."
@@ -217,7 +217,7 @@ pnpm typecheck
                 │
                 ↓
 ┌─────────────────────────────────────┐
-│  Memory Context Engine (Core)       │
+│  Akashic Context (Core)             │
 │  ├─ MemoryManager                   │
 │  ├─ HybridSearch                    │
 │  └─ MemoryStorage (SQLite)          │

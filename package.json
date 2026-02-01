@@ -1,11 +1,11 @@
 {
-  "name": "memory-context-engine-monorepo",
+  "name": "akashic-context-monorepo",
   "version": "0.0.1",
   "private": true,
   "description": "Universal Memory & Context Engine for LLMs",
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOUR_USERNAME/memory-context-engine.git"
+    "url": "https://github.com/tostechbr/akashic-context.git"
   },
   "author": "Tiago Santos",
   "license": "MIT",

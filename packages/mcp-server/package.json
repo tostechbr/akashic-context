@@ -1,7 +1,7 @@
 {
-  "name": "@memory-context-engine/mcp-server",
+  "name": "@akashic-context/mcp-server",
   "version": "0.1.0",
-  "description": "MCP Server adapter for memory-context-engine",
+  "description": "MCP Server adapter for akashic-context",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
-    "memory-context-engine": "workspace:*",
+    "akashic-context": "workspace:*",
     "zod": "^3.23.0"
   },
   "devDependencies": {

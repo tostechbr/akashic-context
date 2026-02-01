@@ -9,7 +9,7 @@ import {
   MemoryManager,
   createOpenAIEmbeddingProvider,
   type EmbeddingProvider
-} from "memory-context-engine";
+} from "akashic-context";
 import { z } from "zod";
 
 /**
@@ -34,7 +34,7 @@ export interface McpServerConfig {
 }
 
 /**
- * MCP Server for Memory Context Engine
+ * MCP Server for Akashic Context
  * Exposes memory search and retrieval tools via Model Context Protocol
  */
 export class MemoryMcpServer {
@@ -70,7 +70,7 @@ export class MemoryMcpServer {
     // Initialize MCP Server
     this.server = new Server(
       {
-        name: "memory-context-engine",
+        name: "akashic-context",
         version: "0.1.0",
       },
       {

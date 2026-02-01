@@ -1,273 +1,248 @@
-# 🧠 Memory Context Engine
+# Akashic Context
 
-> Universal Memory & Context Management for LLMs
+**Universal Memory & Context Engine for LLMs**
 
-**Status**: ✅ **Phase 1 Complete** - Core memory system ready for production (97.7% test coverage)
+> "Akashic Context" implies a universal, infinite context for your AI.
 
-## Overview
+Akashic Context is an open-source library that adds persistent memory to AI agents. Your agents can remember past conversations, decisions, and context across sessions.
 
-Memory Context Engine is a standalone library that adds intelligent memory and context management to any LLM-based application. Extracted and adapted from the battle-tested [Moltbot](https://github.com/moltbot/moltbot) project.
+## Why?
 
-### Features
+AI agents forget everything after each conversation. This library solves that by:
 
-- 🧠 **Long-term Memory**: Hybrid search (Vector + BM25) for semantic + keyword matching
-- 🔌 **MCP Protocol**: Model Context Protocol server for AI agent integration
-- 🤖 **Universal Integration**: Works with Claude Desktop, Cursor, n8n, LangChain, and more
-- 📝 **Markdown Storage**: Human-readable, version-control friendly
-- 🚀 **Battle-Tested**: Code extracted from production Moltbot system
-- 🔒 **Local-First**: All data stays on your machine
-- 🔐 **Secure**: Path traversal protection, file size limits, environment-based secrets
+- **Storing memories** in simple Markdown files (human-readable, git-friendly)
+- **Searching intelligently** using keyword matching (BM25)
+- **Integrating easily** via MCP Protocol (works with n8n, Claude Desktop, Cursor)
 
-## Packages
+## Quick Start with n8n
 
-| Package | Description | Status |
-|---------|-------------|--------|
-| **[@memory-context-engine/core](./packages/core)** | Core memory system (hybrid search, embeddings, storage) | ✅ **Ready** (86/88 tests) |
-| **[@memory-context-engine/mcp-server](./packages/mcp-server)** | MCP Server adapter for AI agents | ✅ **Ready** |
-
-## Quick Start
-
-### Option 1: Use as MCP Server (Recommended)
-
-Perfect for Claude Desktop, Cursor, n8n, and other AI agents.
-
-**1. Install:**
-```bash
-npm install -g @memory-context-engine/mcp-server
-```
-
-**2. Configure (Claude Desktop example):**
-```json
-// ~/Library/Application Support/Claude/claude_desktop_config.json
-{
-  "mcpServers": {
-    "memory": {
-      "command": "memory-mcp-server",
-      "env": {
-        "MEMORY_WORKSPACE_DIR": "/path/to/your/workspace",
-        "OPENAI_API_KEY": "sk-..."
-      }
-    }
-  }
-}
-```
-
-**3. Use:**
-Ask Claude: *"Search my memory for architecture decisions"*
-
-See [MCP Server README](./packages/mcp-server/README.md) for full documentation.
-
----
-
-### Option 2: Use as Library
-
-Perfect for embedding directly in your TypeScript/JavaScript application.
-
-**1. Install:**
-```bash
-npm install @memory-context-engine/core
-```
-
-**2. Use:**
-```typescript
-import { MemoryManager } from "@memory-context-engine/core";
-
-const manager = new MemoryManager({
-  dataDir: "./data",
-  userId: "user-123",
-  workspaceDir: "./workspace",
-  memory: {
-    enabled: true,
-    provider: "openai",
-    model: "text-embedding-3-small",
-    chunkSize: 400,
-    chunkOverlap: 80,
-  },
-});
-
-// Index memory files
-await manager.sync();
-
-// Search
-const results = await manager.search("database architecture", {
-  maxResults: 5,
-  minScore: 0.4,
-});
-
-console.log(results);
-```
-
-See [Core README](./packages/core/README.md) for full API documentation.
-
-## Architecture
-
-### Core + Adapters Pattern
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Core Library                          │
-│  (@memory-context-engine/core)                          │
-│                                                         │
-│  • MemoryManager - Orchestration                       │
-│  • HybridSearch - Vector + Keyword                     │
-│  • MemoryStorage - SQLite persistence                  │
-│  • EmbeddingProviders - OpenAI, Gemini, Local          │
-└─────────────────────────────────────────────────────────┘
-            ↑                           ↑
-            │                           │
-    ┌───────┴───────┐           ┌───────┴───────┐
-    │  MCP Server   │           │  HTTP API     │
-    │  (stdio)      │           │  (future)     │
-    └───────────────┘           └───────────────┘
-            ↑                           ↑
-            │                           │
-    ┌───────┴───────┐           ┌───────┴───────┐
-    │  Claude       │           │  n8n Cloud    │
-    │  Cursor       │           │  Custom Apps  │
-    │  n8n (local)  │           │               │
-    └───────────────┘           └───────────────┘
-```
-
-**Benefits:**
-- 🎯 **Flexible**: Choose how to integrate (MCP, library, HTTP)
-- 🔧 **Maintainable**: Core logic separated from integration details
-- 🌍 **Open Source Friendly**: Easy to internalize or customize
-- 📦 **Modular**: Adapters evolve independently
-
-## How It Works
-
-### Memory System (Phase 1 - Complete)
-
-1. **Markdown Files**: Store memories in `MEMORY.md` and `memory/*.md`
-2. **Chunking**: Splits content into ~400 token chunks with 80 token overlap
-3. **Embeddings**: Generates vector embeddings via OpenAI/Gemini/Local
-4. **Storage**: SQLite database with FTS5 (keyword) + sqlite-vec (vector)
-5. **Hybrid Search**: Combines vector similarity (70%) + BM25 keyword (30%)
-6. **Retrieval**: Returns ranked results with snippets and scores
-
-### Example Memory File
-
-```markdown
-# memory/2025-01-project-decisions.md
-
-## Database Choice
-
-We decided to use PostgreSQL for the main database because:
-- Strong ACID guarantees
-- JSON support for flexible schemas
-- Mature ecosystem with great tooling
-- Good performance for our scale
-```
-
-### Searching
+### 1. Clone and Build
 
 ```bash
-# Via MCP (Claude Desktop)
-"Search memory for database decisions"
-
-# Via Library
-const results = await manager.search("database decisions");
-// Returns: [{ path, startLine, endLine, score, snippet }]
-```
-
-## Development Status
-
-### ✅ Phase 1: Memory System (Complete - 97.7%)
-
-**Core Library** (`@memory-context-engine/core`):
-- ✅ Chunking algorithm (21/21 tests passing)
-- ✅ Hybrid search (25/25 tests passing)
-- ✅ SQLite storage (20/20 tests passing)
-- ✅ Memory Manager (18/20 tests passing - 2 edge cases)
-- ✅ OpenAI embedding provider
-- ✅ Utilities (hash, tokens, files)
-- ✅ **Total: 86/88 tests passing** 🎉
-
-**MCP Server** (`@memory-context-engine/mcp-server`):
-- ✅ MCP Protocol implementation
-- ✅ Tools: `memory_search`, `memory_get`
-- ✅ stdio transport
-- ✅ Path traversal protection
-- ✅ File size limits (10MB)
-- ✅ Full documentation + examples
-- ✅ Build passing
-
-### 🚧 Phase 2: Context Management (Planned)
-
-- [ ] Session management
-- [ ] Token counting
-- [ ] Message compaction
-- [ ] Context pruning
-
-### 📋 Phase 3: Additional Adapters (Future)
-
-- [ ] HTTP API server (for cloud services)
-- [ ] LangChain Python integration
-- [ ] LangChain.js integration
-
-## Testing
-
-```bash
-# Install dependencies
+git clone https://github.com/tostechbr/akashic-context.git
+cd akashic-context
 pnpm install
-
-# Build native modules (better-sqlite3)
-cd node_modules/.pnpm/better-sqlite3*/node_modules/better-sqlite3
-npm run build-release
-
-# Run tests
-pnpm test
-
-# Build all packages
 pnpm build
 ```
 
-### Test MCP Server Locally
+### 2. Create Your Memory Files
+
+Create a workspace folder with your memories:
+
+```
+my-workspace/
+├── MEMORY.md           # Main memory file
+└── memory/
+    ├── projects.md     # Project notes
+    ├── meetings.md     # Meeting notes
+    └── ideas.md        # Ideas and thoughts
+```
+
+Example `MEMORY.md`:
+
+```markdown
+# My Memory
+
+## About Me
+I'm a developer working on AI projects.
+
+## Current Projects
+- Akashic Context - Adding memory to AI agents
+- My App - A productivity tool
+
+## Important Contacts
+- John: john@email.com - Technical mentor
+- Sarah: sarah@email.com - Design partner
+```
+
+### 3. Configure n8n
+
+**Create MCP Credential:**
+
+| Field | Value |
+|-------|-------|
+| Command | `bash` |
+| Arguments | `/path/to/akashic-context/packages/mcp-server/run-server.sh` |
+| Environments | `OPENAI_API_KEY=sk-your-key` |
+
+**Edit `run-server.sh`** to point to your workspace:
 
 ```bash
+WORKSPACE="/path/to/your/my-workspace"
+```
+
+### 4. Create Your Workflow
+
+Import this workflow in n8n:
+
+```json
+{
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "name": "Chat Trigger"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "options": {
+          "systemMessage": "You are a personal assistant with access to the user's memory.\n\nWhen the user asks a question:\n1. Use memory_search to find relevant information\n2. Respond based on what you find\n\nIf you don't find information, say you don't have that in memory.\n\nRespond clearly and concisely."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": "gpt-4.1-mini"
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "name": "OpenAI Chat Model"
+    },
+    {
+      "parameters": {
+        "operation": "executeTool",
+        "toolName": "memory_search",
+        "toolParameters": "{\"query\": \"{{ $json.chatInput.replace(/\\n/g, ' ').trim() }}\", \"minScore\": 0}"
+      },
+      "type": "n8n-nodes-mcp.mcpClientTool",
+      "name": "MCP Client"
+    }
+  ]
+}
+```
+
+### 5. Test It!
+
+Ask your agent:
+- "What projects am I working on?"
+- "Who is my technical mentor?"
+- "What are my current priorities?"
+
+## How It Works
+
+```
+User Question → AI Agent → MCP Server → Search Memory → Response
+                              ↓
+                    MEMORY.md + memory/*.md
+```
+
+1. **You write** memories in Markdown files
+2. **MCP Server** indexes and searches them
+3. **AI Agent** uses the search results to answer questions
+
+### Search Features
+
+- **Keyword Search (BM25)**: Finds exact and related terms
+- **Chunking**: Large files are split into searchable pieces
+- **Ranking**: Results sorted by relevance score
+
+## Available Tools
+
+### `memory_search`
+
+Search your memories.
+
+```json
+{
+  "query": "project status",
+  "maxResults": 5,
+  "minScore": 0
+}
+```
+
+### `memory_get`
+
+Read a specific file.
+
+```json
+{
+  "path": "memory/projects.md",
+  "from": 1,
+  "lines": 20
+}
+```
+
+## Project Structure
+
+```
+akashic-context/
+├── packages/
+│   ├── core/           # Core library (search, storage, chunking)
+│   └── mcp-server/     # MCP Server for AI agents
+├── examples/           # Example workspaces
+└── test-workspace-mcp/ # Test workspace
+```
+
+## Development
+
+```bash
+# Install
+pnpm install
+
+# Build
+pnpm build
+
+# Test
+pnpm test
+
+# Run MCP Server locally
 cd packages/mcp-server
 node test-simple.js
 ```
 
-See [CLAUDE.md](./CLAUDE.md) for detailed setup instructions.
+See [Testing Guide](./docs/TESTING.md) for detailed testing instructions.
 
-## Security
+## Roadmap
 
-- ✅ **Path Traversal Protection**: Prevents reading files outside workspace
-- ✅ **File Size Limits**: 10MB max to prevent OOM attacks
-- ✅ **Environment Variables**: API keys never hardcoded
-- ✅ **Input Validation**: Zod schemas for all inputs
+- [x] Core memory system
+- [x] MCP Server integration
+- [x] n8n integration
+- [x] Keyword search (BM25)
+- [ ] Vector search (semantic similarity)
 
-See [packages/mcp-server/SECURITY.md](./packages/mcp-server/SECURITY.md) for details.
+## Current Limitations
 
-## Documentation
-
-- **[CLAUDE.md](./CLAUDE.md)**: Development guide, setup, troubleshooting
-- **[Core Package](./packages/core/README.md)**: Core library API
-- **[MCP Server](./packages/mcp-server/README.md)**: MCP Server usage
-- **[Examples](./examples/README.md)**: Usage examples
+- **Local only**: MCP uses stdio, so it works with local n8n. Cloud integration requires HTTP adapter (coming soon).
+- **Keyword search**: Currently uses BM25 keyword matching. Vector search for semantic similarity is in development.
 
 ## Contributing
 
-This is an open-source project. Contributions welcome!
+Contributions are welcome! This is an open-source project.
 
 1. Fork the repository
-2. Create your feature branch
-3. Add tests
-4. Submit a pull request
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-## Credits
+### Areas We Need Help
 
-This project extracts and adapts core memory and context management systems from [Moltbot](https://github.com/moltbot/moltbot), an open-source personal AI assistant.
+- Vector search implementation (sqlite-vec)
+- Claude Desktop integration testing
+- Documentation improvements
+- More embedding providers
+
+## Security
+
+- **Path Traversal Protection**: Cannot read files outside workspace
+- **File Size Limits**: 10MB max per file
+- **No Hardcoded Secrets**: Uses environment variables
 
 ## License
 
-MIT License - See [LICENSE](./LICENSE) for details
+MIT License - See [LICENSE](./LICENSE) for details.
+
+## Credits
+
+Extracted from [Moltbot](https://github.com/moltbot/moltbot), an open-source AI assistant.
 
 ## Author
 
-Tiago Santos ([@tostechbr](https://github.com/tostechbr))
+**Tiago Santos** - [@tostechbr](https://github.com/tostechbr)
 
 ---
 
-**Built with** ❤️ **by developers who believe AI should remember your conversations**
+*Give your AI agents the gift of memory.*

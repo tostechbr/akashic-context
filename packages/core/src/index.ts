@@ -1,5 +1,5 @@
 /**
- * Memory Context Engine
+ * Akashic Context
  * Universal Memory & Context Management for LLMs
  */
 
