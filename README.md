@@ -1,8 +1,8 @@
+<div align="center">
+
 # Akashic Context
 
 **Universal Memory & Context Engine for LLMs**
-
-<div align="center">
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org/)
