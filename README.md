@@ -2,6 +2,14 @@
 
 **Universal Memory & Context Engine for LLMs**
 
+<div align="center">
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org/)
+[![Protocol](https://img.shields.io/badge/Protocol-MCP-orange)](https://modelcontextprotocol.io)
+
+</div>
+
 > "Akashic Context" implies a universal, infinite context for your AI.
 
 Akashic Context is an open-source library that adds persistent memory to AI agents. Your agents can remember past conversations, decisions, and context across sessions.
