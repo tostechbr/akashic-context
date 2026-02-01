@@ -5,9 +5,12 @@ import {
   ListToolsRequestSchema,
   type CallToolRequest,
 } from "@modelcontextprotocol/sdk/types.js";
-import { MemoryManager } from "memory-context-engine";
+import {
+  MemoryManager,
+  createOpenAIEmbeddingProvider,
+  type EmbeddingProvider
+} from "memory-context-engine";
 import { z } from "zod";
-import type { EmbeddingProvider } from "memory-context-engine";
 
 /**
  * Configuration for the MCP Server
@@ -86,10 +89,42 @@ export class MemoryMcpServer {
   private setupEmbeddingProvider(config: McpServerConfig["embedding"]): void {
     if (!config) return;
 
-    // Note: In the current core implementation, embedding provider
-    // is configured via environment variables or passed to MemoryManager
-    // This is a placeholder for future enhancement
-    console.log(`Embedding provider: ${config.provider}`);
+    // Helper to create mock provider
+    const createMockProvider = (reason: string) => {
+      console.error(`[MCP] Using mock embeddings: ${reason} (keyword-only search)`);
+      this.manager.setEmbeddingProvider({
+        model: "mock",
+        embed: async (texts: string[]) => {
+          // Return random normalized vectors (BM25 keyword search still works)
+          return texts.map(() => {
+            const vec = Array(1536).fill(0).map(() => Math.random());
+            const norm = Math.sqrt(vec.reduce((sum, v) => sum + v * v, 0));
+            return vec.map(v => v / norm);
+          });
+        }
+      });
+    };
+
+    if (config.provider === "openai") {
+      const apiKey = config.apiKey || process.env.OPENAI_API_KEY;
+
+      // Check if API key is missing or is a test/mock value
+      if (!apiKey || apiKey === "mock" || apiKey === "test" || apiKey.startsWith("mock-") || apiKey.startsWith("test-")) {
+        createMockProvider("no valid API key");
+        return;
+      }
+
+      // Use real OpenAI provider
+      const provider = createOpenAIEmbeddingProvider({
+        apiKey,
+        model: config.model,
+      });
+
+      this.manager.setEmbeddingProvider(provider);
+      console.error(`[MCP] Embedding provider: OpenAI (${config.model || "text-embedding-3-small"})`);
+    } else {
+      createMockProvider(`provider=${config.provider}`);
+    }
   }
 
   /**
@@ -266,7 +301,7 @@ export class MemoryMcpServer {
 
       // Security check: Ensure the resolved path is within workspace
       if (!requestedAbsPath.startsWith(workspaceAbsPath + "/") &&
-          requestedAbsPath !== workspaceAbsPath) {
+        requestedAbsPath !== workspaceAbsPath) {
         return {
           content: [
             {
@@ -330,6 +365,16 @@ export class MemoryMcpServer {
    * Start the MCP server with stdio transport
    */
   async start(): Promise<void> {
+    // Sync memory files before starting (index them)
+    console.error("Indexing memory files...");
+    try {
+      await this.manager.sync();
+      const chunkCount = this.manager.getChunkCount();
+      console.error(`Indexed ${chunkCount} chunks from memory files`);
+    } catch (error) {
+      console.error("Warning: Failed to sync memory files:", error instanceof Error ? error.message : error);
+    }
+
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     console.error("Memory MCP Server started on stdio");

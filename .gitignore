@@ -38,6 +38,10 @@ test-data/
 
 # Test workspaces (exclude root test-workspace, keep examples/test-workspace)
 /test-workspace/
+/test-workspace-mcp/
+
+# Planning and drafts
+article/
 
 # SQLite databases
 *.db

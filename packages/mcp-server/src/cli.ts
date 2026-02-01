@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import { MemoryMcpServer } from "./index.js";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
+import { existsSync } from "node:fs";
 
 /**
  * Parse command line arguments
@@ -21,11 +21,15 @@ function parseArgs() {
 
   // Parse command line args (simple key=value format)
   for (const arg of args) {
-    const [key, value] = arg.split("=");
+    const [key, ...rest] = arg.split("=");
+    const value = rest.join("="); // Handle values that contain =
     if (key === "--workspace") config.workspaceDir = value;
     if (key === "--db") config.dbPath = value;
     if (key === "--provider") config.embedding.provider = value as "openai" | "local";
   }
+
+  // Resolve workspace to absolute path
+  config.workspaceDir = resolve(config.workspaceDir);
 
   return config;
 }
@@ -36,31 +40,49 @@ function parseArgs() {
 async function main() {
   const config = parseArgs();
 
-  console.error("Starting Memory MCP Server...");
-  console.error(`Workspace: ${config.workspaceDir}`);
-  console.error(`Database: ${config.dbPath}`);
-  console.error(`Embedding: ${config.embedding.provider}`);
+  console.error("[MCP] Starting Memory MCP Server...");
+  console.error(`[MCP] Workspace: ${config.workspaceDir}`);
+  console.error(`[MCP] Database: ${config.dbPath}`);
+  console.error(`[MCP] Embedding: ${config.embedding.provider}`);
+  console.error(`[MCP] API Key: ${config.embedding.apiKey ? "present" : "not set"}`);
+
+  // Validate workspace exists
+  if (!existsSync(config.workspaceDir)) {
+    console.error(`[MCP] ERROR: Workspace directory does not exist: ${config.workspaceDir}`);
+    process.exit(1);
+  }
 
   const server = new MemoryMcpServer(config);
 
   // Handle graceful shutdown
   process.on("SIGINT", async () => {
-    console.error("\nShutting down...");
+    console.error("[MCP] Received SIGINT, shutting down...");
     await server.close();
     process.exit(0);
   });
 
   process.on("SIGTERM", async () => {
-    console.error("\nShutting down...");
+    console.error("[MCP] Received SIGTERM, shutting down...");
     await server.close();
     process.exit(0);
   });
 
+  // Handle uncaught errors
+  process.on("uncaughtException", (error) => {
+    console.error("[MCP] Uncaught exception:", error);
+  });
+
+  process.on("unhandledRejection", (reason) => {
+    console.error("[MCP] Unhandled rejection:", reason);
+  });
+
   // Start server
+  console.error("[MCP] Initializing server...");
   await server.start();
+  console.error("[MCP] Server running, waiting for requests...");
 }
 
 main().catch((error) => {
-  console.error("Fatal error:", error);
+  console.error("[MCP] Fatal error:", error);
   process.exit(1);
 });
