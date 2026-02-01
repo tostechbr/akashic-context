@@ -1,16 +1,11 @@
 # Dependencies
 node_modules/
-.pnp
-.pnp.js
+.pnpm-debug.log
 
-# Build output
+# Build outputs
 dist/
 build/
 *.tsbuildinfo
-
-# Testing
-coverage/
-.nyc_output/
 
 # Environment
 .env
@@ -28,29 +23,23 @@ coverage/
 .DS_Store
 Thumbs.db
 
-# Logs
-logs/
+# Testing
+coverage/
+.nyc_output/
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
 
-# Temporary
-.tmp/
-.cache/
-*.tmp
-
-# Data (test data)
-data/
+# Temporary files
+tmp/
+temp/
 test-data/
-*.sqlite
-*.sqlite-shm
-*.sqlite-wal
 
-# Claude Code (não subir!)
-.claude/
-# CLAUDE.md
-.clawdrc.json
-.agent/
-*.claude-context
+# Turbo
+.turbo/
+
+# Test workspaces (exclude root test-workspace, keep examples/test-workspace)
+/test-workspace/
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
