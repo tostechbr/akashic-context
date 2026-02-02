@@ -34,7 +34,7 @@ The MCP Server implements robust path traversal protection in the `memory_get` t
 
 // ✅ ALLOWED: Valid workspace file
 {
-  "path": "memory/2025-01.md"
+  "path": "memory/2026-01.md"
 }
 // Response: File content
 ```

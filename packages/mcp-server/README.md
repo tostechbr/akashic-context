@@ -148,7 +148,7 @@ Search conversation memory using hybrid vector + keyword search.
   "results": [
     {
       "rank": 1,
-      "path": "memory/2025-01-15.md",
+      "path": "memory/2026-01-15.md",
       "lines": "45-52",
       "score": "0.847",
       "snippet": "Decided to use PostgreSQL for main database..."
@@ -170,7 +170,7 @@ Retrieve specific lines from a memory file.
 
 ```json
 {
-  "path": "memory/2025-01-15.md",
+  "path": "memory/2026-01-15.md",
   "from": 45,
   "lines": 10
 }
@@ -239,7 +239,7 @@ See [SECURITY.md](./SECURITY.md) for detailed security documentation.
 
 ```json
 // ✅ ALLOWED
-{ "path": "memory/2025-01.md" }
+{ "path": "memory/2026-01.md" }
 
 // ❌ BLOCKED: Path traversal
 { "path": "../../../etc/passwd" }
