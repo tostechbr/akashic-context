@@ -11,7 +11,11 @@
   "scripts": {
     "build": "tsup src/index.ts src/cli.ts --format esm --dts --clean",
     "dev": "tsx src/cli.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:unit": "vitest run src",
+    "test:integration": "vitest run tests/integration",
+    "test:watch": "vitest watch"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
@@ -22,7 +26,8 @@
     "@types/node": "^20.0.0",
     "tsup": "^8.0.0",
     "tsx": "^4.0.0",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "vitest": "^1.6.1"
   },
   "keywords": [
     "mcp",

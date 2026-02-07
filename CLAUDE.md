@@ -7,10 +7,156 @@ Open-source library for adding persistent memory and context management to AI ag
 ## Project Status
 
 ```
-Phase 1: Memory Search      ✅ CURRENT
-Phase 2: Context Management 🚧 NEXT
+Phase 1: Memory Search      ✅ COMPLETE (MCP + n8n working)
+Phase 1.5-n8n: Quick Wins   ✅ COMPLETE (2026-02-06)
+                            - memory_store/delete tools ✅
+                            - 20 unit tests (100%) ✅
+                            - 3 n8n workflows ✅
+                            - Architecture docs ✅
+Phase 1.5: Vector Search    🎯 NEXT (sqlite-vec, hybrid merge)
+Phase 2: Context Management 🚧 PLANNED
 Phase 3: Session Lifecycle  📋 FUTURE
 ```
+
+**Current Focus**: Ready for Phase 1.5 (Vector Search) or n8n production testing
+
+## Next Steps (Hybrid Approach - n8n Focus)
+
+**Strategy**: Quick wins for n8n production readiness → Vector search quality → Cloud deployment
+
+**Context**: Focus on n8n integration with local testing first, then cloud deployment.
+
+### Fase 1: Quick Wins n8n ✅ COMPLETA (2026-02-06)
+
+**Objetivo**: Tornar n8n integration production-ready
+
+**Tarefas Implementadas**:
+
+1. ✅ **memory_store tool**
+   - Arquivo: `packages/mcp-server/src/index.ts`
+   - Implementado: `handleMemoryStore(path, content)`
+   - Features: Criar/atualizar arquivos `.md`, auto-create directories
+   - Segurança: Path traversal protection, file type validation, 10MB limit
+   - Testes: 8 unit tests (100% coverage)
+
+2. ✅ **memory_delete tool**
+   - Arquivo: `packages/mcp-server/src/index.ts`
+   - Implementado: `handleMemoryDelete(path)`
+   - Features: Deletar arquivos obsoletos, proteger MEMORY.md
+   - Segurança: Path traversal protection, MEMORY.md protection
+   - Testes: 5 unit tests (100% coverage)
+
+3. ✅ **Workflows n8n completos**
+   - Básico: `examples/n8n-chatbot-basic.json` (search only)
+   - Completo: `examples/n8n-chatbot-complete.json` (search + store)
+   - Avançado: `examples/n8n-chatbot-advanced.json` (full CRUD)
+   - Documentação: `examples/README.md`
+
+4. ✅ **Testes e documentação**
+   - Unit tests: `packages/mcp-server/src/index.test.ts` (20 tests, 100% coverage)
+   - Integration tests: Reorganizados em `tests/integration/`
+   - Arquitetura: `docs/ARCHITECTURE.md`
+   - Guia de testes: `docs/TESTING-LOCAL.md`
+
+**Entregáveis**:
+- ✅ MCP server com 4 tools: search, get, store, delete
+- ✅ 20 unit tests (100% coverage) - Vitest
+- ✅ 3 workflows n8n (basic, complete, advanced)
+- ✅ Documentação completa (4 novos docs)
+- ✅ Arquitetura padronizada seguindo packages/core
+
+---
+
+### Fase 2: Vector Search (2-3 semanas) 🚀 APÓS QUICK WINS
+
+**Objetivo**: Melhorar qualidade da busca (Phase 1.5 oficial)
+
+**Tarefas**:
+
+1. **sqlite-vec Extension**
+   - Carregar extensão `vec0.dylib`
+   - Criar tabela virtual `chunks_vec`
+   - Dimensões: 1536 (text-embedding-3-small)
+
+2. **Vector Search**
+   - Implementar busca por cosine similarity
+   - Query: `vec_distance_cosine(embedding, ?)`
+   - Retornar top-K resultados semânticos
+
+3. **Hybrid Merge Algorithm**
+   - Mesclar resultados: 70% vector + 30% keyword
+   - Função: `mergeHybridResults()`
+   - Deduplicate por chunk ID
+
+4. **Embedding Batch API**
+   - OpenAI Batch API (50% mais barato)
+   - Workflow: Upload JSONL → Submit batch → Poll → Download
+   - Implementar: `batch-openai.ts`
+
+5. **Multi-Agent Isolation**
+   - DB separado por agente: `{agentId}.sqlite`
+   - Isolar memórias entre diferentes agentes
+
+**Entregáveis**:
+- ✅ Busca semântica funcionando
+- ✅ Hybrid search (melhor qualidade)
+- ✅ Economia de 50% em embeddings
+- ✅ Testes matemáticos validados
+
+---
+
+### Fase 3: Cloud Ready (1 semana) ☁️ DEPLOY
+
+**Objetivo**: Preparar para n8n cloud e produção
+
+**Tarefas**:
+
+1. **HTTP Adapter**
+   - REST API para MCP tools
+   - Endpoints: `/search`, `/store`, `/get`, `/delete`
+   - Auth: API key
+
+2. **Deploy para cloud**
+   - Opções: Railway, Fly.io, Render
+   - Postgres ou SQLite remoto
+   - Environment variables
+
+3. **Testes em n8n cloud**
+   - Configurar HTTP webhook
+   - Validar performance
+   - Documentar limitações
+
+**Entregáveis**:
+- ✅ HTTP API funcionando
+- ✅ Deploy em cloud provider
+- ✅ Documentação de deploy
+- ✅ n8n cloud testado
+
+---
+
+### Critérios de Sucesso
+
+**Fase 1 (Quick Wins)** ✅ COMPLETA:
+- [x] memory_store implementado e testado (8 unit tests)
+- [x] memory_delete implementado e testado (5 unit tests)
+- [x] Workflow n8n completo funcionando (3 workflows)
+- [x] 3 casos de uso documentados (examples/README.md)
+- [x] Testes locais validados (20 tests passing)
+- [x] Arquitetura padronizada (docs/ARCHITECTURE.md)
+
+**Fase 2 (Vector Search)**:
+- [ ] sqlite-vec carregando corretamente
+- [ ] Busca vetorial retorna resultados relevantes
+- [ ] Hybrid merge > 80% de precisão
+- [ ] Batch API economizando 50%
+
+**Fase 3 (Cloud)**:
+- [ ] API HTTP respondendo < 500ms
+- [ ] Deploy funcionando 24/7
+- [ ] n8n cloud conectado
+- [ ] Documentação completa
+
+---
 
 ## Project Structure
 

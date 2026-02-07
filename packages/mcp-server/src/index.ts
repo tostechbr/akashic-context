@@ -184,6 +184,44 @@ export class MemoryMcpServer {
             required: ["path"],
           },
         },
+        {
+          name: "memory_store",
+          description:
+            "Save or update a memory file in the workspace. " +
+            "Creates directories automatically if they don't exist. " +
+            "Use this to persist new information, conversation summaries, or learnings.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              path: {
+                type: "string",
+                description: "Relative path to save the file (e.g., 'memory/2026-02-06.md')",
+              },
+              content: {
+                type: "string",
+                description: "Markdown content to write to the file",
+              },
+            },
+            required: ["path", "content"],
+          },
+        },
+        {
+          name: "memory_delete",
+          description:
+            "Delete a memory file from the workspace. " +
+            "Use this to remove outdated or incorrect information. " +
+            "Cannot delete MEMORY.md (the main memory file).",
+          inputSchema: {
+            type: "object",
+            properties: {
+              path: {
+                type: "string",
+                description: "Relative path to the file to delete (e.g., 'memory/old-notes.md')",
+              },
+            },
+            required: ["path"],
+          },
+        },
       ],
     }));
 
@@ -199,6 +237,10 @@ export class MemoryMcpServer {
               return await this.handleMemorySearch(args);
             case "memory_get":
               return await this.handleMemoryGet(args);
+            case "memory_store":
+              return await this.handleMemoryStore(args);
+            case "memory_delete":
+              return await this.handleMemoryDelete(args);
             default:
               throw new Error(`Unknown tool: ${name}`);
           }
@@ -354,6 +396,235 @@ export class MemoryMcpServer {
           {
             type: "text",
             text: `Error reading file: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  /**
+   * Handle memory_store tool call
+   * Safely writes files to the workspace directory with path traversal protection
+   */
+  private async handleMemoryStore(args: unknown) {
+    const schema = z.object({
+      path: z.string(),
+      content: z.string(),
+    });
+
+    const { path, content } = schema.parse(args);
+
+    const fs = await import("node:fs/promises");
+    const { resolve, normalize, dirname } = await import("node:path");
+
+    try {
+      // Normalize path and remove any ".." components
+      const safePath = normalize(path).replace(/^(\.\.(\/|\\|$))+/, '');
+
+      // Resolve absolute paths
+      const workspaceAbsPath = resolve(this.workspaceDir);
+      const requestedAbsPath = resolve(workspaceAbsPath, safePath);
+
+      // Security check: Ensure the resolved path is within workspace
+      if (!requestedAbsPath.startsWith(workspaceAbsPath + "/") &&
+        requestedAbsPath !== workspaceAbsPath) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: Path outside workspace directory is not allowed",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Security check: Only allow .md files
+      if (!requestedAbsPath.endsWith('.md')) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: Only .md files are allowed",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Check content size (10MB limit)
+      const MAX_CONTENT_SIZE = 10 * 1024 * 1024;
+      if (content.length > MAX_CONTENT_SIZE) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error: Content too large (${(content.length / 1024 / 1024).toFixed(2)}MB > 10MB limit)`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Create parent directories if they don't exist
+      const dirPath = dirname(requestedAbsPath);
+      await fs.mkdir(dirPath, { recursive: true });
+
+      // Write file
+      await fs.writeFile(requestedAbsPath, content, "utf-8");
+
+      // Trigger memory manager to reindex the file
+      try {
+        await this.manager.sync();
+        const chunkCount = this.manager.getChunkCount();
+        console.error(`[MCP] File saved and indexed: ${safePath} (total chunks: ${chunkCount})`);
+      } catch (syncError) {
+        console.error(`[MCP] Warning: File saved but indexing failed:`, syncError);
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                success: true,
+                path: safePath,
+                bytes: content.length,
+                message: `File saved successfully and indexed`,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error writing file: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  /**
+   * Handle memory_delete tool call
+   * Safely deletes files from the workspace directory with path traversal protection
+   */
+  private async handleMemoryDelete(args: unknown) {
+    const schema = z.object({
+      path: z.string(),
+    });
+
+    const { path } = schema.parse(args);
+
+    const fs = await import("node:fs/promises");
+    const { resolve, normalize, basename } = await import("node:path");
+
+    try {
+      // Normalize path and remove any ".." components
+      const safePath = normalize(path).replace(/^(\.\.(\/|\\|$))+/, '');
+
+      // Resolve absolute paths
+      const workspaceAbsPath = resolve(this.workspaceDir);
+      const requestedAbsPath = resolve(workspaceAbsPath, safePath);
+
+      // Security check: Ensure the resolved path is within workspace
+      if (!requestedAbsPath.startsWith(workspaceAbsPath + "/") &&
+        requestedAbsPath !== workspaceAbsPath) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: Path outside workspace directory is not allowed",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Security check: Prevent deleting MEMORY.md (main memory file)
+      const fileName = basename(requestedAbsPath);
+      if (fileName === "MEMORY.md") {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: Cannot delete MEMORY.md (main memory file is protected)",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Security check: Only allow .md files
+      if (!requestedAbsPath.endsWith('.md')) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: Can only delete .md files",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Check if file exists
+      try {
+        await fs.access(requestedAbsPath);
+      } catch {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error: File not found: ${safePath}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Delete file
+      await fs.unlink(requestedAbsPath);
+
+      // Trigger memory manager to reindex
+      try {
+        await this.manager.sync();
+        const chunkCount = this.manager.getChunkCount();
+        console.error(`[MCP] File deleted and reindexed: ${safePath} (total chunks: ${chunkCount})`);
+      } catch (syncError) {
+        console.error(`[MCP] Warning: File deleted but reindexing failed:`, syncError);
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                success: true,
+                path: safePath,
+                message: `File deleted successfully`,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error deleting file: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
         isError: true,

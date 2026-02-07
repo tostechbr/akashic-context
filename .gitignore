@@ -44,6 +44,10 @@ test-data/
 # Planning and drafts
 article/
 
+# Internal planning docs (optional)
+/docs/REFACTOR-PLAN.md
+/docs/TESTING-LOCAL.md
+
 # SQLite databases
 *.db
 *.db-shm

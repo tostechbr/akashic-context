@@ -356,15 +356,19 @@ pnpm install
 # Build
 pnpm build
 
-# Test
+# Test all packages
 pnpm test
 
-# Run MCP Server locally
+# Test MCP server only
 cd packages/mcp-server
-node test-simple.js
+pnpm test:unit        # Unit tests (fast, recommended)
+pnpm test:watch       # Watch mode for development
+
+# Build and test MCP Server
+pnpm build && pnpm test
 ```
 
-See [Testing Guide](./docs/TESTING.md) for detailed instructions.
+See [Testing Guide](./docs/TESTING.md) and [Architecture](./docs/ARCHITECTURE.md) for detailed instructions.
 
 ## Current Limitations
 
