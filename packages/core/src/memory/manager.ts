@@ -16,7 +16,7 @@ import { hashText } from "../utils/hash.js";
 import { listMemoryFiles, exists } from "../utils/files.js";
 import { chunkMarkdown } from "./chunking.js";
 import { mergeHybridResults } from "./hybrid.js";
-import { MemoryStorage, type StorageConfig, type StoredChunk, type StoredFile } from "./storage.js";
+import { MemoryStorage, type StorageConfig, type StoredChunk, type StoredFile, type VectorSearchResult } from "./storage.js";
 import type { MemoryConfig, MemoryChunk, MemorySearchResult } from "../types.js";
 
 export interface MemoryManagerConfig {
@@ -71,6 +71,15 @@ export class MemoryManager {
    */
   setEmbeddingProvider(provider: EmbeddingProvider): void {
     this.provider = provider;
+  }
+
+  /**
+   * Embed texts using the configured provider.
+   * Returns null if no provider is configured.
+   */
+  async embed(texts: string[]): Promise<number[][] | null> {
+    if (!this.provider) return null;
+    return this.provider.embed(texts);
   }
 
   /**
@@ -305,19 +314,28 @@ export class MemoryManager {
       }
     }
 
-    // Vector search
+    // Vector search — prefer native sqlite-vec, fall back to in-process TypeScript cosine similarity
     let vectorResults: Array<{ id: string; path: string; source: string; startLine: number; endLine: number; snippet: string; vectorScore: number }> = [];
-    if (this.provider && this.storage.isVecAvailable()) {
+    if (this.provider) {
       try {
         const embeddings = await this.provider.embed([cleaned]);
         const queryVec = embeddings[0];
 
         if (queryVec && queryVec.some((v) => v !== 0)) {
-          const rows = this.storage.searchVector({
-            embedding: queryVec,
-            limit: candidates,
-            source: opts?.source,
-          });
+          let rows: VectorSearchResult[];
+          if (this.storage.isVecAvailable()) {
+            rows = this.storage.searchVector({
+              embedding: queryVec,
+              limit: candidates,
+              source: opts?.source,
+            });
+          } else {
+            rows = this.storage.searchVectorInProcess({
+              embedding: queryVec,
+              limit: candidates,
+              source: opts?.source,
+            });
+          }
 
           vectorResults = rows.map((row) => ({
             id: row.id,

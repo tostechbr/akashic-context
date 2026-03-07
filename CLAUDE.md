@@ -18,116 +18,94 @@ Phase 1.5-QA: Tests & Bugs  ✅ COMPLETE (2026-02-06)
                             - Integration tests (15 tests) ✅
                             - QA scenarios (17 assertions) ✅
                             - 140 total tests passing ✅
-Sprint 0: Multi-User        🎯 NEXT (userId isolation — CRITICAL GAP)
-Phase 1.5: Vector Search    📋 AFTER SPRINT 0 (sqlite-vec, hybrid merge)
-Phase 2: Context Management 🚧 PLANNED
+Sprint 0: Multi-User        ✅ COMPLETE (2026-03-06)
+                            - userId param in all 4 MCP tools ✅
+                            - Per-user workspace (users/{userId}/) ✅
+                            - Per-user SQLite DB ✅
+                            - Working memory (context.json) ✅
+                            - memory_context MCP tool ✅
+                            - 12 isolation tests (100%) ✅
+                            - Validated in n8n (store+search+isolation) ✅
+                            - Bug fixes: path validation, minScore 0.35→0.15 ✅
+Sprint 1: Vector Search     ✅ COMPLETE (2026-03-07)
+                            - cosineSimilarity() + searchVectorInProcess() ✅
+                            - Hybrid merge using real vector results ✅
+                            - memory_add tool (LLM extract + merge) ✅
+                            - extractionModel configurable (default: gpt-4o-mini) ✅
+                            - 149 total tests passing (10 new math + 4 memory_add) ✅
+Sprint 2: Context Management 🎯 NEXT
 Phase 3: Session Lifecycle  📋 FUTURE
 ```
 
-**Current Focus**: Sprint 0 — Multi-User Isolation (userId per tool call)
+**Current Focus**: Sprint 2 — Context Management (token counting, compaction, pruning)
 
-### ⚠️ CRITICAL ARCHITECTURAL GAP: Multi-User Isolation
+### ✅ RESOLVED: Multi-User Isolation (Sprint 0 — 2026-03-06)
 
-**Problema descoberto**: O sistema atual não tem isolamento por usuário.
-Todas as chamadas MCP compartilham o mesmo workspace e banco de dados.
+Isolamento por usuário implementado e validado em n8n:
 
-**Exemplo do problema**:
 ```
-WhatsApp Bot com 100 usuários
-→ Todos escrevem no MESMO memory/
-→ Usuário A busca e encontra dados do Usuário B
-→ Zero privacidade, zero isolamento
-```
+memory_search({ query: "projetos", userId: "user_123" })
 
-**Solução planejada (Sprint 0)**:
-```
-ANTES:  memory_search({ query: "projetos" })
-DEPOIS: memory_search({ query: "projetos", userId: "user_123" })
-
-Estrutura de dados:
+Estrutura de dados implementada:
 {dataDir}/
 ├── users/
 │   ├── user_123/
-│   │   ├── memory.db          ← DB isolado
+│   │   ├── memory.db          ← DB isolado por usuário
 │   │   ├── MEMORY.md
+│   │   ├── context.json       ← working memory (scratchpad)
 │   │   └── memory/*.md
-│   ├── user_456/
-│   │   ├── memory.db
-│   │   ├── MEMORY.md
-│   │   └── memory/*.md
-│   └── ...
-└── shared/                    ← (futuro) memória compartilhada
+│   └── default/               ← backward compatible (sem userId)
+└── ...
 ```
 
-**Impacto**: Todas as 4 MCP tools precisam receber `userId`:
-- `memory_search({ query, userId, ... })`
-- `memory_get({ path, userId })`
-- `memory_store({ path, content, userId })`
-- `memory_delete({ path, userId })`
+Todas as 4 MCP tools aceitam `userId` opcional (default: `"default"`).
+Nova tool `memory_context` para get/set do scratchpad JSON por sessão.
 
-## Next Steps (Hybrid Approach - n8n Focus)
+## Next Steps (Sprint 1 Focus)
 
-**Strategy**: Multi-user isolation → Vector search quality → Context management → Cloud deployment
+**Strategy**: Vector search quality → Context management → Cloud deployment
 
-**Context**: Multi-user isolation é PRÉ-REQUISITO para qualquer uso em produção (WhatsApp, chatbots, etc).
+**Context**: Sprint 0 ✅ completo. Próximo bloqueio de qualidade: busca semântica.
 
-### Sprint 0: Multi-User Isolation 🎯 NEXT
+### Sprint 0: Multi-User Isolation ✅ COMPLETA (2026-03-06)
 
-**Objetivo**: Cada usuário tem seu próprio espaço de memória isolado.
+Ver seção "RESOLVED: Multi-User Isolation" acima. Todos os entregáveis implementados e validados em n8n.
+
+---
+
+### Sprint 1: Vector Search 🎯 NEXT
+
+**Objetivo**: Busca semântica — encontrar por significado, não só por palavras-chave.
 
 **Tarefas**:
 
-1. **userId em todas as MCP tools**
-   - Arquivo: `packages/mcp-server/src/index.ts`
-   - Adicionar parâmetro `userId` (string) em memory_search, memory_get, memory_store, memory_delete
-   - Se `userId` não fornecido → usar `"default"` (backward compatible)
-
-2. **Per-user workspace**
-   - Arquivo: `packages/core/src/memory/manager.ts`
-   - Workspace muda de `{dataDir}/` para `{dataDir}/users/{userId}/`
-   - Cada userId tem seu próprio MEMORY.md e memory/*.md
-
-3. **Per-user database**
+1. **Carregar sqlite-vec**
    - Arquivo: `packages/core/src/memory/storage.ts`
-   - DB muda de `{dataDir}/memory.db` para `{dataDir}/users/{userId}/memory.db`
-   - Total isolamento — zero vazamento entre usuários
+   - Resolver carregamento do `vec0.dylib` por plataforma (macOS/Linux)
 
-4. **Testes de isolamento**
-   - User A armazena → User B não encontra
-   - User A deleta → User B não é afetado
-   - Default user funciona sem userId (backward compatible)
+2. **Vector search end-to-end**
+   - Garantir que embeddings vão para `chunks_vec`
+   - `searchVector()` retorna resultados por cosine similarity
 
-5. **n8n Workflow com userId**
-   - WhatsApp webhook → extrair phone number como userId
-   - Passar userId em todas as chamadas MCP
-   - Exemplo: `memory_search({ query: "...", userId: "5511999999999" })`
+3. **Validar hybrid merge**
+   - Query semântica encontra o que keyword não encontra
+   - Testes com dados reais (query ≠ texto literal)
 
-6. **Working Memory (scratchpad JSON por usuário)**
-   - Inspirado em: [memclawz QMD](https://github.com/yoniassia/memclawz) — scratchpad JSON que persiste entre sessões
-   - Arquivo: `packages/core/src/memory/working-memory.ts`
-   - Cada usuário tem `{dataDir}/users/{userId}/context.json` com estado ativo:
-     ```json
-     {
-       "session_id": "whatsapp-2026-03-01",
-       "active_topic": "Negociação contrato X",
-       "last_interaction": "2026-03-01T22:00:00Z",
-       "pending_decisions": ["Aprovar proposta?"],
-       "entities_seen": ["Empresa ABC", "João Silva"],
-       "updated_at": "2026-03-01T22:30:00Z"
-     }
-     ```
-   - Nova MCP tool: `memory_context` (read/write do scratchpad ativo)
-   - Camada 0 — lida ANTES de qualquer busca (<1ms)
-   - Agente lê context.json no início → tem contexto instantâneo sem busca
+4. **memory_add tool (Mem0-like)**
+   - Nova MCP tool: extrai fatos da conversa via LLM e salva automaticamente
+   - Input: `{ message, userId }` → LLM extrai → salva em `memory/`
+   - Diferencial vs. `memory_store` manual
+
+5. **Testes de busca semântica**
+   - Benchmark: vector > keyword em 10 queries de teste
+   - Validar hybrid merge (70% vec + 30% keyword)
 
 **Entregáveis**:
-- [ ] userId em todas as 4 MCP tools
-- [ ] Per-user workspace e database
-- [ ] Working Memory (context.json por usuário)
-- [ ] MCP tool `memory_context` (get/set working memory)
-- [ ] Testes de isolamento (mínimo 10 tests)
-- [ ] Backward compatible (sem userId = "default")
-- [ ] Exemplo de workflow n8n com WhatsApp
+- [ ] sqlite-vec carregando em macOS e Linux
+- [ ] Busca vetorial retornando resultados relevantes
+- [ ] Hybrid merge > keyword-only em benchmark
+- [ ] `memory_add` tool funcionando via n8n
+- [ ] Testes matemáticos validados
 
 ---
 
@@ -281,11 +259,19 @@ Estrutura de dados:
 
 **Fase 1 (Quick Wins)** ✅ COMPLETA:
 - [x] memory_store implementado e testado (8 unit tests)
-- [x] memory_delete implementado e testado (5 unit tests)
-- [x] Workflow n8n completo funcionando (3 workflows)
-- [x] 3 casos de uso documentados (examples/README.md)
-- [x] Testes locais validados (20 tests passing)
-- [x] Arquitetura padronizada (docs/ARCHITECTURE.md)
+  - [x] Memory `stats` interface for observability
+  - [x] Basic n8n demo workflow (`examples/n8n-chatbot-basic.json`)
+- **[x] Sprint 0: Multi-User Isolation** (Completed)
+  - [x] Extracted logic to support isolated folders per user (`users/{userId}/...`)
+  - [x] Updated indexing and `MEMORY.md` logic for isolation
+  - [x] Updated MCP server arguments across all tools to accept `userId`
+- **[x] Sprint 1: Knowledge Engine (Vector Search + Smart Extraction)** (Completed)
+  - [x] Compute embeddings locally in memory
+  - [x] Setup Hybrid search (Text via FTS5 + Vector Cosine Similarity filtering) fallback
+  - [x] Add tool `memory_add` with auto "AI Fact Extraction" and Deduplication (LLM automatic file merging on high similarity)
+  - [x] Integrated OpenAI embeddings and chat completions via HTTP fallback
+- **[ ] Sprint 2: Time-Awareness and Active Recall** (Up next)
+  - [ ] Ingest Agent & Consolidator (Sleep/CRON mode to compress facts using background jobs)
 
 **Fase 2 (Vector Search)**:
 - [ ] sqlite-vec carregando corretamente

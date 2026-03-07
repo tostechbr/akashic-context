@@ -4,6 +4,7 @@
 
 import { describe, expect, test, beforeEach, afterEach } from "vitest";
 import { MemoryStorage } from "./storage.js";
+import { cosineSimilarity } from "./chunking.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -418,5 +419,188 @@ describe("MemoryStorage", () => {
       // No error should be thrown
       expect(true).toBe(true);
     });
+  });
+});
+
+// ─── cosineSimilarity unit tests ──────────────────────────────────────────────
+
+describe("cosineSimilarity", () => {
+  test("identical vectors → 1", () => {
+    const v = [1, 0, 0, 0];
+    expect(cosineSimilarity(v, v)).toBeCloseTo(1, 10);
+  });
+
+  test("orthogonal vectors → 0", () => {
+    expect(cosineSimilarity([1, 0], [0, 1])).toBeCloseTo(0, 10);
+  });
+
+  test("opposite vectors → -1", () => {
+    expect(cosineSimilarity([1, 0], [-1, 0])).toBeCloseTo(-1, 10);
+  });
+
+  test("zero vector → 0 (no division by zero)", () => {
+    expect(cosineSimilarity([0, 0, 0], [1, 0, 0])).toBe(0);
+  });
+
+  test("normalized unit vectors in 3D", () => {
+    const a = [1 / Math.sqrt(3), 1 / Math.sqrt(3), 1 / Math.sqrt(3)];
+    const b = [1 / Math.sqrt(3), 1 / Math.sqrt(3), 1 / Math.sqrt(3)];
+    expect(cosineSimilarity(a, b)).toBeCloseTo(1, 10);
+  });
+
+  test("partial overlap vectors have similarity between 0 and 1", () => {
+    const sim = cosineSimilarity([1, 1, 0], [1, 0, 0]);
+    expect(sim).toBeGreaterThan(0);
+    expect(sim).toBeLessThan(1);
+    // cos(45°) = 1/√2 ≈ 0.707
+    expect(sim).toBeCloseTo(1 / Math.sqrt(2), 5);
+  });
+});
+
+// ─── searchVectorInProcess tests ──────────────────────────────────────────────
+
+describe("searchVectorInProcess", () => {
+  let storage: MemoryStorage;
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = path.join(process.cwd(), ".test-vec-db");
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    storage = new MemoryStorage({
+      dataDir: tempDir,
+      userId: "vec-test-user",
+      sessionId: `vec-${Date.now()}`,
+    });
+  });
+
+  afterEach(() => {
+    storage.close();
+    if (fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("returns nearest chunk sorted by distance ASC", () => {
+    // Near chunk: embedding = [1, 0, 0] → cosine sim with query [1,0,0] = 1 → distance = 0
+    storage.upsertChunk({
+      id: "near",
+      path: "test.md",
+      source: "memory",
+      startLine: 1,
+      endLine: 2,
+      hash: "h1",
+      model: "test",
+      text: "near chunk",
+      embedding: JSON.stringify([1, 0, 0]),
+      updatedAt: Date.now(),
+    });
+
+    // Far chunk: embedding = [0, 1, 0] → cosine sim with query [1,0,0] = 0 → distance = 1
+    storage.upsertChunk({
+      id: "far",
+      path: "test.md",
+      source: "memory",
+      startLine: 3,
+      endLine: 4,
+      hash: "h2",
+      model: "test",
+      text: "far chunk",
+      embedding: JSON.stringify([0, 1, 0]),
+      updatedAt: Date.now(),
+    });
+
+    // Default maxDistance = 0.7, so "near" (d=0) is included, "far" (d=1) is excluded
+    const results = storage.searchVectorInProcess({ embedding: [1, 0, 0], limit: 10 });
+    expect(results.length).toBe(1);
+    expect(results[0]?.id).toBe("near");
+    expect(results[0]?.distance).toBeCloseTo(0, 10);
+  });
+
+  test("filters by maxDistance", () => {
+    // Two partially-similar chunks
+    storage.upsertChunk({
+      id: "c1",
+      path: "a.md",
+      source: "memory",
+      startLine: 1,
+      endLine: 1,
+      hash: "h1",
+      model: "test",
+      text: "chunk1",
+      embedding: JSON.stringify([1, 1, 0]),
+      updatedAt: Date.now(),
+    });
+    storage.upsertChunk({
+      id: "c2",
+      path: "a.md",
+      source: "memory",
+      startLine: 2,
+      endLine: 2,
+      hash: "h2",
+      model: "test",
+      text: "chunk2",
+      embedding: JSON.stringify([1, 0, 0]),
+      updatedAt: Date.now(),
+    });
+
+    // Query [1, 0, 0]:
+    // c1: cosine([1,0,0],[1,1,0]) = 1/√2 ≈ 0.707, distance ≈ 0.293
+    // c2: cosine([1,0,0],[1,0,0]) = 1, distance = 0
+
+    // maxDistance = 0.15 → only c2 (d=0)
+    const strict = storage.searchVectorInProcess({ embedding: [1, 0, 0], limit: 10, maxDistance: 0.15 });
+    expect(strict.length).toBe(1);
+    expect(strict[0]?.id).toBe("c2");
+
+    // maxDistance = 0.4 → both c1 (d≈0.293) and c2 (d=0)
+    const loose = storage.searchVectorInProcess({ embedding: [1, 0, 0], limit: 10, maxDistance: 0.4 });
+    expect(loose.length).toBe(2);
+    expect(loose[0]?.id).toBe("c2"); // nearest first
+    expect(loose[1]?.id).toBe("c1");
+  });
+
+  test("respects limit", () => {
+    for (let i = 0; i < 5; i++) {
+      storage.upsertChunk({
+        id: `c${i}`,
+        path: "x.md",
+        source: "memory",
+        startLine: i,
+        endLine: i,
+        hash: `h${i}`,
+        model: "test",
+        text: `chunk ${i}`,
+        embedding: JSON.stringify([1, i * 0.01, 0]), // all very close to [1,0,0]
+        updatedAt: Date.now(),
+      });
+    }
+
+    const results = storage.searchVectorInProcess({ embedding: [1, 0, 0], limit: 2, maxDistance: 1.0 });
+    expect(results.length).toBe(2);
+  });
+
+  test("returns empty when no chunks within maxDistance", () => {
+    storage.upsertChunk({
+      id: "c1",
+      path: "x.md",
+      source: "memory",
+      startLine: 1,
+      endLine: 1,
+      hash: "h1",
+      model: "test",
+      text: "orthogonal",
+      embedding: JSON.stringify([0, 1, 0]),
+      updatedAt: Date.now(),
+    });
+
+    // Query [1,0,0] vs chunk [0,1,0]: distance = 1 > maxDistance 0.15
+    const results = storage.searchVectorInProcess({
+      embedding: [1, 0, 0],
+      limit: 10,
+      maxDistance: 0.15,
+    });
+    expect(results.length).toBe(0);
   });
 });

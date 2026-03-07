@@ -13,6 +13,7 @@
 import Database from "better-sqlite3";
 import path from "node:path";
 import { ensureDir } from "../utils/files.js";
+import { cosineSimilarity } from "./chunking.js";
 
 export interface StorageConfig {
   dataDir: string;
@@ -45,6 +46,8 @@ export interface SearchVectorParams {
   embedding: number[];
   limit: number;
   source?: string;
+  /** Maximum cosine distance to include (default: 0.7 ≈ similarity ≥ 0.3). Used by searchVectorInProcess. */
+  maxDistance?: number;
 }
 
 export interface SearchKeywordParams {
@@ -399,6 +402,45 @@ export class MemoryStorage {
     const rows = stmt.all(...queryParams) as VectorSearchResult[];
 
     return rows;
+  }
+
+  /**
+   * In-process vector search using TypeScript cosine similarity.
+   * Loads all chunk embeddings from SQLite and computes similarity in Node.js.
+   * Suitable for up to ~2000 chunks per user. Falls back gracefully without sqlite-vec.
+   */
+  searchVectorInProcess(params: SearchVectorParams): VectorSearchResult[] {
+    const maxDistance = params.maxDistance ?? 0.7; // default: similarity >= 0.3
+
+    let sql =
+      "SELECT id, path, source, start_line as startLine, end_line as endLine, text, embedding FROM chunks";
+    const queryParams: unknown[] = [];
+
+    if (params.source) {
+      sql += " WHERE source = ?";
+      queryParams.push(params.source);
+    }
+
+    const stmt = this.db.prepare(sql);
+    const rows = stmt.all(...queryParams) as Array<{
+      id: string;
+      path: string;
+      source: string;
+      startLine: number;
+      endLine: number;
+      text: string;
+      embedding: string;
+    }>;
+
+    return rows
+      .map((row) => {
+        const rowEmbedding = JSON.parse(row.embedding) as number[];
+        const sim = cosineSimilarity(params.embedding, rowEmbedding);
+        return { ...row, distance: 1 - sim };
+      })
+      .filter((r) => r.distance <= maxDistance)
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, params.limit);
   }
 
   /**

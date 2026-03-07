@@ -298,4 +298,86 @@ describe("MemoryMcpServer", () => {
       expect(result.content[0].text).toContain("cannot be empty");
     });
   });
+
+  describe("handleMemoryAdd", () => {
+    test("creates a new memory file", async () => {
+      // Zero-vector provider: queryVec.some(v => v !== 0) is false → skip similarity search → always create
+      const manager = await server["getOrCreateManager"]("user_add_create");
+      manager.setEmbeddingProvider({
+        model: "zero",
+        embed: async (texts: string[]) => texts.map(() => new Array(1536).fill(0)),
+      });
+
+      const result = await server["handleMemoryAdd"]({
+        message: "My name is Alice and I am a designer.",
+        userId: "user_add_create",
+      });
+
+      expect(result.isError).toBeUndefined();
+      const data = JSON.parse(result.content[0].text);
+      expect(data.action).toBe("created");
+      expect(data.path).toMatch(/^memory\/facts-\d+\.md$/);
+    });
+
+    test("merges when a similar memory already exists", async () => {
+      const userId = "user_add_merge";
+      // Unit vector: every embed call returns the same direction → cosine distance = 0 < 0.15 → merge
+      const unitVec = Array(1536).fill(1 / Math.sqrt(1536));
+      const manager = await server["getOrCreateManager"](userId);
+      manager.setEmbeddingProvider({
+        model: "deterministic",
+        embed: async (texts: string[]) => texts.map(() => [...unitVec]),
+      });
+
+      // First call: no chunks yet → creates
+      const first = await server["handleMemoryAdd"]({
+        message: "Bob is a backend engineer.",
+        userId,
+      });
+      expect(JSON.parse(first.content[0].text).action).toBe("created");
+
+      // Second call: finds the chunk stored above (distance = 0) → merges
+      const second = await server["handleMemoryAdd"]({
+        message: "Bob now leads the infrastructure team.",
+        userId,
+      });
+      const data = JSON.parse(second.content[0].text);
+      expect(data.action).toBe("merged");
+    });
+
+    test("creates separate files for different topics when no similar memory exists", async () => {
+      const userId = "user_add_topics";
+      // Zero vectors → similarity check always skipped → each call creates a new file
+      const manager = await server["getOrCreateManager"](userId);
+      manager.setEmbeddingProvider({
+        model: "zero",
+        embed: async (texts: string[]) => texts.map(() => new Array(1536).fill(0)),
+      });
+
+      const r1 = await server["handleMemoryAdd"]({
+        message: "I enjoy coffee in the morning.",
+        userId,
+      });
+      const r2 = await server["handleMemoryAdd"]({
+        message: "My project deadline is next Friday.",
+        userId,
+      });
+
+      const d1 = JSON.parse(r1.content[0].text);
+      const d2 = JSON.parse(r2.content[0].text);
+      expect(d1.action).toBe("created");
+      expect(d2.action).toBe("created");
+      expect(d1.path).not.toBe(d2.path);
+    });
+
+    test("rejects empty message", async () => {
+      const result = await server["handleMemoryAdd"]({
+        message: "",
+        userId: "user_add_empty",
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("cannot be empty");
+    });
+  });
 });

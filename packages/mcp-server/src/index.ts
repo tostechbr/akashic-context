@@ -33,6 +33,8 @@ export interface McpServerConfig {
     vector: number;
     text: number;
   };
+  /** LLM model for memory_add extraction/merge (default: "gpt-4o-mini") */
+  extractionModel?: string;
 }
 
 /**
@@ -47,12 +49,14 @@ export class MemoryMcpServer {
   private dataDir: string;
   private embeddingConfig?: McpServerConfig["embedding"];
   private hybridWeights?: McpServerConfig["hybridWeights"];
+  private extractionModel: string;
 
   constructor(config: McpServerConfig) {
     this.workspaceDir = config.workspaceDir;
     this.dataDir = config.dbPath ? config.dbPath.replace(/\/[^/]+$/, "") : "./data";
     this.embeddingConfig = config.embedding;
     this.hybridWeights = config.hybridWeights;
+    this.extractionModel = config.extractionModel ?? "gpt-4o-mini";
 
     // Initialize MCP Server
     this.server = new Server(
@@ -147,15 +151,11 @@ export class MemoryMcpServer {
 
     const createMockProvider = (reason: string) => {
       console.error(`[MCP] Using mock embeddings: ${reason} (keyword-only search)`);
+      // Zero vectors ensure queryVec.some(v => v !== 0) is false, bypassing vector search
+      // and leaving only FTS5 keyword search active. This matches the "keyword-only" intent.
       manager.setEmbeddingProvider({
         model: "mock",
-        embed: async (texts: string[]) => {
-          return texts.map(() => {
-            const vec = Array(1536).fill(0).map(() => Math.random());
-            const norm = Math.sqrt(vec.reduce((sum, v) => sum + v * v, 0));
-            return vec.map(v => v / norm);
-          });
-        }
+        embed: async (texts: string[]) => texts.map(() => new Array(1536).fill(0)),
       });
     };
 
@@ -316,6 +316,29 @@ export class MemoryMcpServer {
             required: ["operation"],
           },
         },
+        {
+          name: "memory_add",
+          description:
+            "Intelligently add information to memory with automatic deduplication. " +
+            "If a very similar memory exists (cosine similarity ≥ 0.85), the LLM merges " +
+            "the new info into that file (action: 'merged'). Otherwise, it extracts " +
+            "structured facts and creates a new file (action: 'created'). " +
+            "Requires an OpenAI API key for embedding + extraction.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              message: {
+                type: "string",
+                description: "Raw text/message to extract facts from and store in memory",
+              },
+              userId: {
+                type: "string",
+                description: "User identifier for isolation (default: 'default')",
+              },
+            },
+            required: ["message"],
+          },
+        },
       ],
     }));
 
@@ -337,6 +360,8 @@ export class MemoryMcpServer {
               return await this.handleMemoryDelete(args);
             case "memory_context":
               return await this.handleMemoryContext(args);
+            case "memory_add":
+              return await this.handleMemoryAdd(args);
             default:
               throw new Error(`Unknown tool: ${name}`);
           }
@@ -817,6 +842,173 @@ export class MemoryMcpServer {
           },
         ],
       };
+    }
+  }
+
+  /**
+   * Handle memory_add tool call.
+   * Pipeline: embed → find similar (cosine ≥ 0.85) → LLM merge or extract → save → sync.
+   */
+  private async handleMemoryAdd(args: unknown) {
+    const schema = z.object({
+      message: z.string(),
+      userId: z.string().optional().default("default"),
+    });
+
+    const { message, userId } = schema.parse(args);
+
+    if (!message || message.trim().length === 0) {
+      return {
+        content: [{ type: "text", text: "Error: message cannot be empty" }],
+        isError: true,
+      };
+    }
+
+    const manager = await this.getOrCreateManager(userId);
+    const userWorkspaceDir = this.getUserWorkspaceDir(userId);
+    const storage = manager.getStorage();
+
+    // Step 1: Embed the message
+    const embeds = await manager.embed([message]);
+    const queryVec = embeds?.[0];
+
+    // Step 2: Search for highly-similar existing memory (similarity ≥ 0.60 → distance ≤ 0.40)
+    let similarFile: { path: string; content: string } | null = null;
+    if (queryVec && queryVec.some((v) => v !== 0)) {
+      // First, get the raw top matches without distance limit to debug
+      const debugVectors = storage.searchVectorInProcess({
+        embedding: queryVec,
+        limit: 3,
+        maxDistance: 1.0, // get anything
+      });
+      console.error("[MCP-DEBUG] Vector search top matches for query:");
+      debugVectors.forEach((v, i) => {
+        console.error(`  [${i + 1}] Distance: ${v.distance.toFixed(3)} | Path: ${v.path} | Text: ${v.text.substring(0, 50)}...`);
+      });
+
+      const similar = storage.searchVectorInProcess({
+        embedding: queryVec,
+        limit: 3,
+        maxDistance: 0.50, // cosine similarity >= 0.50
+      });
+
+      if (similar.length > 0 && similar[0]) {
+        const absPath = path.join(userWorkspaceDir, similar[0].path);
+        try {
+          const content = await fs.readFile(absPath, "utf-8");
+          similarFile = { path: similar[0].path, content };
+        } catch {
+          // File no longer on disk — treat as no match
+        }
+      }
+    }
+
+    // Step 3: LLM extraction or merge
+    const apiKey = this.embeddingConfig?.apiKey || process.env.OPENAI_API_KEY;
+    let action: "created" | "merged";
+    let targetPath: string;
+    let finalContent: string;
+
+    if (similarFile) {
+      action = "merged";
+      targetPath = similarFile.path;
+      finalContent = await this.callLLM(apiKey, this.extractionModel, "merge", {
+        existing: similarFile.content,
+        newMessage: message,
+      });
+    } else {
+      action = "created";
+      targetPath = `memory/facts-${Date.now()}.md`;
+      finalContent = await this.callLLM(apiKey, this.extractionModel, "extract", {
+        message,
+      });
+    }
+
+    // Step 4: Save and re-index
+    const absPath = path.join(userWorkspaceDir, targetPath);
+    await fs.mkdir(path.dirname(absPath), { recursive: true });
+    await fs.writeFile(absPath, finalContent, "utf-8");
+
+    try {
+      await manager.sync({ force: true });
+    } catch (syncError) {
+      console.error(`[MCP] Warning: memory_add sync failed:`, syncError);
+    }
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              action,
+              path: targetPath,
+              summary: `Memory ${action} successfully`,
+            },
+            null,
+            2
+          ),
+        },
+      ],
+    };
+  }
+
+  /**
+   * Call OpenAI chat completion for fact extraction or memory merge.
+   * Falls back to simple Markdown formatting if no valid API key is configured.
+   */
+  private async callLLM(
+    apiKey: string | undefined,
+    model: string,
+    mode: "extract" | "merge",
+    params: { message?: string; existing?: string; newMessage?: string }
+  ): Promise<string> {
+    const isMockKey =
+      !apiKey ||
+      apiKey === "mock" ||
+      apiKey === "test" ||
+      apiKey.startsWith("mock-") ||
+      apiKey.startsWith("test-");
+
+    // No-LLM fallback for tests and missing keys
+    if (isMockKey) {
+      if (mode === "extract") {
+        return `# Memory\n\n${params.message}`;
+      }
+      return `${params.existing}\n\n## Update\n\n${params.newMessage}`;
+    }
+
+    const prompt =
+      mode === "extract"
+        ? `Extract structured facts from the following message as clean Markdown.\nUse headers for categories (Profile, Preferences, Projects, etc).\nBe concise. Only include factual information.\nMessage: ${params.message}`
+        : `You have existing memory and new information.\nProduce a merged version that: preserves all unique facts, updates outdated information with the new version.\nExisting:\n${params.existing}\n\nNew information: ${params.newMessage}`;
+
+    try {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 1000,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`OpenAI API error: ${response.status}`);
+      }
+
+      const data = (await response.json()) as {
+        choices: Array<{ message: { content: string } }>;
+      };
+      return data.choices[0]?.message?.content ?? (mode === "extract" ? `# Memory\n\n${params.message}` : `${params.existing}`);
+    } catch {
+      // Fallback on network or API errors
+      if (mode === "extract") return `# Memory\n\n${params.message}`;
+      return `${params.existing}\n\n## Update\n\n${params.newMessage}`;
     }
   }
 

@@ -72,17 +72,50 @@ constructor(config: StorageConfig) {
 - Zod schemas validate all input params
 - Error responses use `{ content: [{ type: "text", text: "Error: ..." }], isError: true }`
 
-## Current State (Sprint 0 starts here)
+## Current State (Sprint 1 starts here)
+
+### Sprint 0 ✅ COMPLETE (2026-03-06)
 
 | Component | State |
 |-----------|-------|
-| `userId` in `MemoryManagerConfig` | ✅ exists (uncommitted) |
-| `userId` in `StorageConfig` | ✅ exists (uncommitted) |
-| MCP tools expose `userId` param | ❌ hardcoded `"mcp-user"` |
-| Per-user workspace directory | ❌ flat `workspaceDir/` |
-| Per-user database path | ❌ flat `{dataDir}/memory_{userId}.db` |
-| `working-memory.ts` | ❌ does not exist |
-| `memory_context` MCP tool | ❌ does not exist |
+| `userId` in all 4 MCP tools | ✅ optional, default "default" |
+| Per-user workspace `users/{userId}/` | ✅ implemented |
+| Per-user DB `users/{userId}/memory.db` | ✅ implemented |
+| `working-memory.ts` + `context.json` | ✅ implemented |
+| `memory_context` MCP tool | ✅ implemented |
+| Manager pool `getOrCreateManager(userId)` | ✅ implemented |
+| Isolation tests | ✅ 12 tests passing |
+| `memory_store` path validation | ✅ must be `memory/` or `MEMORY.md` |
+| `minScore` default | ✅ changed 0.35 → 0.15 |
+
+### Sprint 1 🎯 IN PROGRESS
+
+| Component | State |
+|-----------|-------|
+| `cosineSimilarity()` in `storage.ts` | ❌ does not exist |
+| `searchVectorInProcess()` in `storage.ts` | ❌ does not exist |
+| Hybrid merge using real vector results | ❌ falls back to keyword only |
+| `memory_add` MCP tool | ❌ does not exist |
+| `extractionModel` config | ❌ does not exist |
+| OpenAI chat client in MCP server | ❓ check if embedding provider exposes it |
+
+### MCP Server Current Tools (5 tools)
+
+```
+memory_search  — BM25 keyword (vector fallback ready, not yet wired)
+memory_get     — read file by path
+memory_store   — write file (must be memory/ or MEMORY.md)
+memory_delete  — delete file (protects MEMORY.md)
+memory_context — get/set context.json scratchpad
+```
+
+### listMemoryFiles() constraint (CRITICAL)
+
+`packages/core/src/utils/files.ts` ONLY scans:
+- `{workspaceDir}/MEMORY.md`
+- `{workspaceDir}/memory/*.md`
+
+Files at any other location are NOT indexed. `memory_store` enforces this with a validation error.
 
 ## Conventions
 
@@ -93,10 +126,11 @@ constructor(config: StorageConfig) {
 - **Utilities available**: `ensureDir(dir)`, `exists(path)`, `hashText(content)`, `listMemoryFiles(dir)`
 - **Test command**: `pnpm test -- --run`
 - **Build command**: `pnpm build`
-- **140 tests currently passing** — must stay green
+- **47+ tests currently passing** — must stay green
 
 ## Existing Tests Location
 
 - `packages/core/src/memory/manager.test.ts` — MemoryManager unit tests
 - `packages/mcp-server/src/index.test.ts` — MCP handler unit tests
-- `packages/mcp-server/src/integration.test.ts` — End-to-end integration tests
+- `packages/mcp-server/src/integration.test.ts` — End-to-end integration (15 tests)
+- `packages/mcp-server/src/isolation.test.ts` — Multi-user isolation (12 tests)
